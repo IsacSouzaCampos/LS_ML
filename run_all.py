@@ -1,5 +1,9 @@
 from __future__ import print_function
 from sys import argv
+import time
+from os import listdir
+from os.path import isfile, join
+import numpy as np
 from utilities import *
 
 os.system('python3 clean.py')
@@ -36,7 +40,7 @@ if exec_collapse:
         collapse_file_path = "%s/%s_collapse_%di_%do.pla" % (collapse_dir, name_split, nr_inputs, nr_outputs)
         run_collapse_script(benchmark_dir, name_benchmark, collapse_file_path, outdir="tmp")
         time_f = time.time()
-        time_table.append([name_benchmark, "collapse", nr_inputs, str(time_f - time_i).replace('.', ':')])
+        time_table.append([name_benchmark, "collapse", nr_inputs, time_f - time_i])
 
 # PART 2 --- ESPRESSO REDUCTION AND AIG TRANSLATION #############
 seed = 0
@@ -82,30 +86,28 @@ for pla_path in train_file_list:
         pla_single = write_single_out_pla(full_path, idx)
         time_f = time.time()
         total_time += time_f - time_i
-        time_table.append([pla_path, "write_single_out_pla", num_feats, str(time_f - time_i).replace('.', ':')])
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "write_single_out_pla", num_feats, time_f - time_i])
 
         time_i = time.time()
         espresso = run_espresso(pla_single, full_path.split('/')[-1])
         time_f = time.time()
         total_time += time_f - time_i
-        time_table.append([pla_path, "run_espresso", num_feats, str(time_f - time_i).replace('.', ':')])
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "run_espresso", num_feats, time_f - time_i])
 
         time_i = time.time()
         aig = gen_pla_aig(espresso)
         time_f = time.time()
         total_time += time_f - time_i
-        time_table.append([pla_path, "gen_pla_aig", num_feats, str(time_f - time_i).replace('.', ':')])
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "gen_pla_aig", num_feats, time_f - time_i])
 
         time_i = time.time()
         ands, levs, acc_abc = run_aig(aig, pla_single, outdir="tmp")
         time_f = time.time()
         total_time += time_f - time_i
-        time_table.append([pla_path, "run_aig", num_feats, str(time_f - time_i).replace('.', ':')])
-
-        time_table.append([pla_path, 'total_time', num_feats, str(total_time).replace('.', ':')])
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "run_aig", num_feats, time_f - time_i])
 
         print(",".join([str(x) for x in [pla_path, nr_inputs, nr_outputs, idx, acc_abc, ands, levs]]), file=f_out)
-    print(",".join([str(x) for x in [pla_path, str(total_time).replace('.', ':')]]), file=total_time_output)
+    print(",".join([str(x) for x in [pla_path, total_time]]), file=total_time_output)
 
 np.savetxt("time_table.csv", time_table, fmt="%s", delimiter=",", header="benchmark,function,nb inputs,time/call (s)")
 
