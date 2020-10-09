@@ -68,7 +68,7 @@ def write_single_out_pla(pla, idx, outdir="tmp"):
     return '%s/temp.pla' % outdir
 
 
-def run_espresso(full_path, final_name, outdir='Benchmarks_espresso'):
+def run_optimized_espresso(full_path, final_name, outdir='Benchmarks_espresso'):
     if not os.path.exists(outdir):
         os.system(f'mkdir {outdir}')
     final_path = '%s/%s' % (outdir, final_name)
@@ -77,35 +77,43 @@ def run_espresso(full_path, final_name, outdir='Benchmarks_espresso'):
     return f'{final_path}'
 
 
-def gen_pla_aig(espresso_pla_path, outdir='AIG'):
+def gen_aig(espresso_pla_path, outdir='AIG'):
     if not os.path.exists(outdir):
         os.system(f'mkdir {outdir}')
     final_path = '%s/%s' % (outdir, espresso_pla_path.split('/')[-1].replace('pla', 'aig'))
-    with open('aig_maker_script', 'w') as aig_maker, open('compress2rs', 'r') as compress2rs:
+    with open('tmp/aig_maker_script', 'w') as aig_maker, open('compress2rs', 'r') as compress2rs:
         print(f'read_pla {espresso_pla_path}', file=aig_maker)
         print('strash', file=aig_maker)
-        print(f'{compress2rs.read()[:-1]}', file=aig_maker)
         print(f'write_aiger {final_path}', file=aig_maker)
 
-    os.system(f'./abc -F aig_maker_script')
+    os.system(f'./abc -F tmp/aig_maker_script')
     return f'{final_path}'
 
 
+def compress2rs(aig):
+    with open('tmp/compress2rs_script', 'w') as fout, open('compress2rs', 'r') as c2rs:
+        print(f'read_aiger {aig}', file=fout)
+        print(f'{c2rs.read()}', file=fout)
+        print(f'write_aiger {aig}', file=fout)
+
+    os.system('./abc -F tmp/compress2rs_script')
+
+
 def run_aig(aig, pla, outdir="."):
-    with open("%s/scriptRunAig" % outdir, "w") as fOut:
+    with open("%s/tmp/scriptRunAig" % outdir, "w") as fOut:
         print("&r %s" % aig, file=fOut)
         print("&ps", file=fOut)
         print("&mltest %s" % pla, file=fOut)
-    os.system("./abc -F %s/scriptRunAig > %s/abc_output.txt" % (outdir, outdir))
+    os.system("./abc -F %s/tmp/scriptRunAig > %s/tmp/abc_output.txt" % (outdir, outdir))
 
     if platform.system() == "Darwin":
-        os.system('sed -E "s/\x1B\[([0-9]{1,3}(;[0-9]{1,2})?)?[mGK]//g" %s/abc_output.txt > %s/abc_output_parsed.txt'
+        os.system('sed -E "s/\x1B\[([0-9]{1,3}(;[0-9]{1,2})?)?[mGK]//g" %s/tmp/abc_output.txt > %s/tmp/abc_output_parsed.txt'
                   % (outdir, outdir))
     else:
-        os.system('sed -r "s/\x1B\[([0-9]{1,3}(;[0-9]{1,2})?)?[mGK]//g" %s/abc_output.txt > %s/abc_output_parsed.txt'
+        os.system('sed -r "s/\x1B\[([0-9]{1,3}(;[0-9]{1,2})?)?[mGK]//g" %s/tmp/abc_output.txt > %s/tmp/abc_output_parsed.txt'
                   % (outdir, outdir))
 
-    with open("%s/abc_output_parsed.txt" % outdir, "r") as fIn:
+    with open("%s/tmp/abc_output_parsed.txt" % outdir, "r") as fIn:
         lines = fIn.readlines()
         # print(lines[26])
         ands = lines[4].split()[8]

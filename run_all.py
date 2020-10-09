@@ -18,6 +18,7 @@ if len(argv) > 1:
     MAX_WIDTH = int(argv[1])
 
 # PART 1 --- COLLAPSING INPUT FILES TO OBTAIN COMPLETE TRUTH TABLES #############
+collapse_time_table = []
 time_table = []
 benchmark_total_time = []
 os.system("mkdir -p tmp")
@@ -40,7 +41,8 @@ if exec_collapse:
         collapse_file_path = "%s/%s_collapse_%di_%do.pla" % (collapse_dir, name_split, nr_inputs, nr_outputs)
         run_collapse_script(benchmark_dir, name_benchmark, collapse_file_path, outdir="tmp")
         time_f = time.time()
-        time_table.append([name_benchmark, "collapse", nr_inputs, time_f - time_i])
+        # time_table.append([name_benchmark, "collapse", nr_inputs, time_f - time_i])
+        collapse_time_table.append([name_benchmarks, time_f - time_i])
 
 # PART 2 --- ESPRESSO REDUCTION AND AIG TRANSLATION #############
 seed = 0
@@ -77,6 +79,14 @@ for pla_path in train_file_list:
     num_feats = len(feature_names)
 
     total_time = 0
+
+    for element in collapse_time_table:
+        if base_name in str(element[0]).replace('.pla', ''):
+            time_table.append(
+                [pla_path, "collapse", num_feats, element[1]])
+            total_time += element[1]
+            break
+
     for idx in range(Y.shape[1]):
         tmp_name = base_name + "_out%d" % idx
 
@@ -89,24 +99,31 @@ for pla_path in train_file_list:
         time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "write_single_out_pla", num_feats, time_f - time_i])
 
         time_i = time.time()
-        espresso = run_espresso(pla_single, full_path.split('/')[-1])
+        espresso = run_optimized_espresso(pla_single, full_path.split('/')[-1])
+        time_f = time.time()
+        total_time += time_f - time_i
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "run_optimized_espresso", num_feats, time_f - time_i])
+
+        time_i = time.time()
+        aig = gen_aig(espresso)
+        time_f = time.time()
+        total_time += time_f - time_i
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "gen_aig", num_feats, time_f - time_i])
+
+        time_i = time.time()
+        compress2rs(aig)
+        time_f = time.time()
+        total_time += time_f - time_i
+        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "compress2rs", num_feats, time_f - time_i])
+
+        time_i = time.time()
+        ands, lev, acc_abc = run_aig(aig, pla_single)
         time_f = time.time()
         total_time += time_f - time_i
         time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "run_espresso", num_feats, time_f - time_i])
 
-        time_i = time.time()
-        aig = gen_pla_aig(espresso)
-        time_f = time.time()
-        total_time += time_f - time_i
-        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "gen_pla_aig", num_feats, time_f - time_i])
-
-        time_i = time.time()
-        ands, levs, acc_abc = run_aig(aig, pla_single, outdir="tmp")
-        time_f = time.time()
-        total_time += time_f - time_i
-        time_table.append([pla_path.replace('.pla', f'({idx}).pla'), "run_aig", num_feats, time_f - time_i])
-
-        print(",".join([str(x) for x in [pla_path, nr_inputs, nr_outputs, idx, acc_abc, ands, levs]]), file=f_out)
+        print(",".join([str(x) for x in [pla_path.replace('.pla', f'({idx}).pla'), nr_inputs, nr_outputs, idx, acc_abc,
+                                         ands, lev]]), file=f_out)
     print(",".join([str(x) for x in [pla_path, total_time]]), file=total_time_output)
 
 np.savetxt("time_table.csv", time_table, fmt="%s", delimiter=",", header="benchmark,function,nb inputs,time/call (s)")
